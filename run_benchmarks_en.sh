@@ -26,41 +26,53 @@ JUDGE_API_KEY=""
 ROLL_LABELED="FALSE"
 USE_VL_MODE="FALSE"
 
-# ================== Task list (execution order) ==================
+# ================== Task list (available benchmark names) ==================
+# Names are what the user types after --benchmarks (case-insensitive).
 TASK_NAMES=(
-  "LAB-Bench"
-  "GPQA" "AIME24" "AIME25" "LIVE_MATH_BENCH"
-  "ChemBench" "Physics"
-  "Qiskit_HumanEval" "MaScQA" "MSQA_Long" "MSQA_Short" "SciBench" "ProteinLMbench" "TOMG-Bench" "AMC23"
+  "chembench"
+  "gpqa"
+  "lab_bench"
+  "mascqa"
+  "msqa_long"
+  "msqa_short"
+  "physics"
+  "qiskit_humaneval"
+  "protein_lmbench"
+  "scibench"
+  "tomg_bench"
+  "aime24"
+  "aime25"
+  "amc23"
+  "live_math_bench"
 )
 
 # ================== Task configs ==================
-# Format: "DisplayName|BenchmarkDir|FixedArgs"
+# Format: "task_name|BenchmarkDir|FixedArgs"
 # - FixedArgs only contains task-specific args (NOT full params).
 TASK_CONFIGS=(
-  "ChemBench|ChemBench|"
-  "GPQA|GPQA|"
-  "LAB-Bench|LAB-Bench|"
-  "MaScQA|MaScQA|"
-  "MSQA_Long|MSQA_Long|"
-  "MSQA_Short|MSQA_Short|"
-  "Physics|Physics|"
-  "Qiskit_HumanEval|Qiskit_HumanEval|"
-  "ProteinLMbench|ProteinLMBench|"
-  "SciBench|SciBench|"
-  "TOMG-Bench|TOMG-Bench|"
-  "AIME25|MATH|--task aime25"
-  "AIME24|MATH|--task aime24"
-  "AMC23|MATH|--task amc23"
-  "LIVE_MATH_BENCH|MATH|--task live_math_bench"
+  "chembench|ChemBench|"
+  "gpqa|GPQA|"
+  "lab_bench|LAB-Bench|"
+  "mascqa|MaScQA|"
+  "msqa_long|MSQA_Long|"
+  "msqa_short|MSQA_Short|"
+  "physics|Physics|"
+  "qiskit_humaneval|Qiskit_HumanEval|"
+  "protein_lmbench|ProteinLMBench|"
+  "scibench|SciBench|"
+  "tomg_bench|TOMG-Bench|"
+  "aime24|MATH|--task aime24"
+  "aime25|MATH|--task aime25"
+  "amc23|MATH|--task amc23"
+  "live_math_bench|MATH|--task live_math_bench"
 )
 
 show_help() {
   echo "Usage:"
-  echo "  $0 --model <model_name> --api_url <api_url> [options] [task_number ...]"
+  echo "  $0 --model <model_name> --api_url <api_url> [options] [--benchmarks task1 task2 ...]"
   echo
-  echo "Run benchmark tasks sequentially (by task number)."
-  echo "If no task number is given, run all tasks."
+  echo "Run benchmark tasks sequentially."
+  echo "If --benchmarks is not provided, run all tasks."
   echo
   echo "Required options:"
   echo "  --model            Model name (required flag; value may be empty string \"\")"
@@ -80,17 +92,19 @@ show_help() {
   echo "  --judge_api_key"
   echo "  --roll_labeled TRUE|FALSE"
   echo "  --use_vl_mode TRUE|FALSE"
+  echo "  --benchmarks       Task names to run (space-separated)."
   echo "  -h, --help"
   echo
   echo "Examples:"
-  echo "  Run all:   $0 --model \"my_model\" --api_url \"http://127.0.0.1:8000/v1\" --api_key \"...\""
-  echo "  Run 1&3:   $0 --model \"my_model\" --api_url \"http://127.0.0.1:8000/v1\" 1 3"
-  echo "  With roll: $0 --model \"my_model\" --api_url \"...\" --roll_labeled TRUE 6"
+  echo "  Run all: $0 --model \"your-model\" --api_url \"your-api-url\" --api_key \"your-api-key\" --num_workers 10"
+  echo "  Run some:"
+  echo "    $0 --model \"your-model\" --api_url \"your-api-url\" --api_key \"your-api-key\" --num_workers 10 \\"
+  echo "      --benchmarks scibench gpqa chembench"
+  echo "  With roll:"
+  echo "    $0 --model \"your-model\" --api_url \"...\" --roll_labeled TRUE --benchmarks scibench"
   echo
   echo "Available tasks:"
-  for i in "${!TASK_NAMES[@]}"; do
-    echo "  $((i+1)). ${TASK_NAMES[i]}"
-  done
+  for t in "${TASK_NAMES[@]}"; do echo "  - $t"; done
 }
 
 _upper_bool() {
@@ -114,9 +128,19 @@ _mask() {
 parse_args() {
   local model_provided=0
   local api_url_provided=0
-  TASK_NUMS=()
+  BENCHMARKS=()
+  local in_benchmarks=0
 
   while [[ $# -gt 0 ]]; do
+    if [[ $in_benchmarks -eq 1 ]]; then
+      if [[ "$1" == --* ]]; then
+        in_benchmarks=0
+      else
+        BENCHMARKS+=("$1")
+        shift
+        continue
+      fi
+    fi
     case "$1" in
       -h|--help)
         show_help
@@ -145,32 +169,21 @@ parse_args() {
       --judge_api_key) JUDGE_API_KEY="${2-}"; shift 2 ;;
       --roll_labeled) ROLL_LABELED="$(_upper_bool "${2-}")"; shift 2 ;;
       --use_vl_mode) USE_VL_MODE="$(_upper_bool "${2-}")"; shift 2 ;;
+      --benchmarks) in_benchmarks=1; shift ;;
       --)
         shift
         break
         ;;
       *)
-        # Task numbers are positional (e.g. "1 3 5").
-        if [[ "$1" =~ ^[0-9]+$ ]]; then
-          TASK_NUMS+=("$1")
-          shift
-        else
-          echo "Error: unknown option/argument: $1" >&2
-          show_help
-          exit 1
-        fi
+        echo "Error: unknown option/argument: $1" >&2
+        show_help
+        exit 1
         ;;
     esac
   done
 
-  # Remaining args after '--' are also task numbers.
-  for x in "$@"; do
-    if ! [[ "$x" =~ ^[0-9]+$ ]]; then
-      echo "Error: task number must be numeric - $x" >&2
-      exit 1
-    fi
-    TASK_NUMS+=("$x")
-  done
+  # Remaining args after '--' are treated as benchmarks too.
+  for x in "$@"; do BENCHMARKS+=("$x"); done
 
   if [[ $model_provided -eq 0 || $api_url_provided -eq 0 ]]; then
     echo "Error: --model and --api_url are required flags (value may be empty string)" >&2
@@ -181,39 +194,60 @@ parse_args() {
 
 parse_args "$@"
 
-SELECTED_TASK_ORIGINAL_INDEXES=()
-if [[ ${#TASK_NUMS[@]} -eq 0 ]]; then
-  for i in "${!TASK_NAMES[@]}"; do
-    SELECTED_TASK_ORIGINAL_INDEXES+=("$i")
-  done
-else
-  for task_num in "${TASK_NUMS[@]}"; do
-    original_index=$((task_num - 1))
-    if (( original_index < 0 || original_index >= ${#TASK_NAMES[@]} )); then
-      echo "Error: invalid task number - $task_num (valid range: 1..${#TASK_NAMES[@]})" >&2
-      exit 1
+task_exists() {
+  local want="${1,,}"
+  for t in "${TASK_NAMES[@]}"; do
+    if [[ "$t" == "$want" ]]; then
+      return 0
     fi
-    SELECTED_TASK_ORIGINAL_INDEXES+=("$original_index")
   done
-fi
+  return 1
+}
+
+get_config_index_by_task() {
+  local want="${1,,}"
+  for config_index in "${!TASK_CONFIGS[@]}"; do
+    local config_name
+    config_name="$(echo "${TASK_CONFIGS[config_index]}" | cut -d'|' -f1)"
+    if [[ "$config_name" == "$want" ]]; then
+      echo "$config_index"
+      return 0
+    fi
+  done
+  return 1
+}
 
 SELECTED_TASK_CONFIG_INDEXES=()
-for original_index in "${SELECTED_TASK_ORIGINAL_INDEXES[@]}"; do
-  task_name="${TASK_NAMES[original_index]}"
-  found=0
-  for config_index in "${!TASK_CONFIGS[@]}"; do
-    config_name="$(echo "${TASK_CONFIGS[config_index]}" | cut -d'|' -f1)"
-    if [[ "$config_name" == "$task_name" ]]; then
-      SELECTED_TASK_CONFIG_INDEXES+=("$config_index")
-      found=1
-      break
+if [[ ${#BENCHMARKS[@]} -eq 0 ]]; then
+  # Run all, in TASK_NAMES order.
+  for t in "${TASK_NAMES[@]}"; do
+    idx="$(get_config_index_by_task "$t")" || idx=""
+    if [[ -z "$idx" ]]; then
+      echo "Warning: task '$t' not found in TASK_CONFIGS, will skip" >&2
+      continue
+    fi
+    SELECTED_TASK_CONFIG_INDEXES+=("$idx")
+  done
+else
+  for t in "${BENCHMARKS[@]}"; do
+    t_lc="${t,,}"
+    if ! task_exists "$t_lc"; then
+      echo "Error: invalid task name - $t" >&2
+      echo "Available tasks:" >&2
+      for x in "${TASK_NAMES[@]}"; do echo "  - $x" >&2; done
+      exit 1
+    fi
+    idx="$(get_config_index_by_task "$t_lc")" || idx=""
+    if [[ -z "$idx" ]]; then
+      echo "Warning: task '$t' not found in TASK_CONFIGS, will skip" >&2
+      continue
+    fi
+    # de-dupe
+    if ! [[ " ${SELECTED_TASK_CONFIG_INDEXES[*]} " =~ " ${idx} " ]]; then
+      SELECTED_TASK_CONFIG_INDEXES+=("$idx")
     fi
   done
-  if [[ $found -eq 0 ]]; then
-    echo "Warning: task '${task_name}' (#$((original_index+1))) not found in TASK_CONFIGS, will skip" >&2
-    SELECTED_TASK_CONFIG_INDEXES+=("")
-  fi
-done
+fi
 
 TIMESTAMP="$(date +"%Y%m%d%H%M")"
 START_TIME="$(date +"%Y-%m-%d %H:%M:%S")"
@@ -229,10 +263,10 @@ echo "API_URL: $API_URL"
 echo "API_KEY: $([[ -n "$API_KEY" ]] && echo "$(_mask "$API_KEY")" || echo "(not set)")"
 echo
 echo "Tasks to run:"
-for original_index in "${SELECTED_TASK_ORIGINAL_INDEXES[@]}"; do
-  task_num=$((original_index + 1))
-  task_name="${TASK_NAMES[original_index]}"
-  echo "  $task_num. $task_name"
+for config_index in "${SELECTED_TASK_CONFIG_INDEXES[@]}"; do
+  cfg="${TASK_CONFIGS[config_index]}"
+  IFS='|' read -r tname _ _ <<< "$cfg"
+  echo "  - $tname"
 done
 echo "----------------------------------------"
 
@@ -256,8 +290,6 @@ build_common_args
 
 run_task() {
   local task_index="$1"
-  local original_index="$2"
-  local display_num=$((original_index + 1))
   local config="${TASK_CONFIGS[task_index]}"
 
   # Parse config
@@ -271,24 +303,24 @@ run_task() {
   local model_name_no_spaces="${MODEL_NAME// /}"
   local log_file_name="${name}_${model_name_no_spaces}_${TIMESTAMP}.log"
 
-  echo "----- Start task $display_num: $name ($start_time) -----"
+  echo "----- Start task: $name ($start_time) -----"
   echo "Task dir: $task_dir"
 
   if [[ ! -d "$task_dir" ]]; then
     echo "Warning: directory not found, skip - $task_dir"
-    FAILED_TASKS+=("$display_num:$name:dir_not_found")
+    FAILED_TASKS+=("$name:dir_not_found")
     return 1
   fi
 
   pushd "$task_dir" &>/dev/null || {
     echo "Warning: unable to cd, skip - $task_dir"
-    FAILED_TASKS+=("$display_num:$name:cd_failed")
+    FAILED_TASKS+=("$name:cd_failed")
     return 1
   }
 
   mkdir -p "$LOG_DIR_NAME" || {
     echo "Warning: unable to create log dir '$LOG_DIR_NAME', skip"
-    FAILED_TASKS+=("$display_num:$name:mkdir_failed")
+    FAILED_TASKS+=("$name:mkdir_failed")
     popd &>/dev/null
     return 1
   }
@@ -333,24 +365,19 @@ run_task() {
   end_time="$(date +"%Y-%m-%d %H:%M:%S")"
 
   if [[ $exit_code -eq 0 ]]; then
-    echo "Task $display_num: $name succeeded [$end_time]"
-    COMPLETED_TASKS+=("$display_num:$name")
+    echo "Task: $name succeeded [$end_time]"
+    COMPLETED_TASKS+=("$name")
   else
-    echo "Task $display_num: $name failed (exit=$exit_code) [$end_time]"
-    FAILED_TASKS+=("$display_num:$name:exit=$exit_code")
+    echo "Task: $name failed (exit=$exit_code) [$end_time]"
+    FAILED_TASKS+=("$name:exit=$exit_code")
   fi
 
   popd &>/dev/null
   return $exit_code
 }
 
-for i in "${!SELECTED_TASK_ORIGINAL_INDEXES[@]}"; do
-  original_index="${SELECTED_TASK_ORIGINAL_INDEXES[i]}"
-  task_index="${SELECTED_TASK_CONFIG_INDEXES[i]}"
-  if [[ -z "${task_index}" ]]; then
-    continue
-  fi
-  run_task "$task_index" "$original_index"
+for task_index in "${SELECTED_TASK_CONFIG_INDEXES[@]}"; do
+  run_task "$task_index"
   echo "-------------------------------------"
 done
 
