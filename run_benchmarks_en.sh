@@ -5,18 +5,26 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 BASE_DIR="$SCRIPT_DIR/benchmarks"
 LOG_DIR_NAME="logs"
 
-# ================== Global switches ==================
-# If TRUE, append pass_data_path to each benchmark (roll-labeled mode).
+# ================== CLI params (provided by user) ==================
+# --model and --api_url are required flags (value may be empty string).
+MODEL_NAME=""
+API_URL=""
+API_KEY=""
+TEMPERATURE=""
+TOP_P=""
+PRESENCE_PENALTY=""
+MAX_TOKENS=""
+TIMEOUT=""
+NUM_WORKERS=""
+N=""
+
+JUDGE_API_URL=""
+JUDGE_MODEL=""
+JUDGE_API_KEY=""
+
+# Same switches as run_benchmarks.sh, but provided via CLI here.
 ROLL_LABELED="FALSE"
-
-# If TRUE, append --use_vl_mode to each benchmark.
 USE_VL_MODE="FALSE"
-
-# ================== Model / API config ==================
-MODEL_NAME="s1_32b_128k_ckp100_1216"
-API_URL="http://10.20.4.4:50001/v1/"
-API_KEY="EMPTY"
-NUM_WORKERS=150
 
 # ================== Task list (execution order) ==================
 TASK_NAMES=(
@@ -27,44 +35,57 @@ TASK_NAMES=(
 )
 
 # ================== Task configs ==================
-# Format: "DisplayName|BenchmarkDir|Params"
-# NOTE:
-# - Params should NOT include --model (added centrally).
-# - Params SHOULD include --api_url/--api_key/--num_workers if needed.
-# - BenchmarkDir must match folder name under $BASE_DIR.
+# Format: "DisplayName|BenchmarkDir|FixedArgs"
+# - FixedArgs only contains task-specific args (NOT full params).
 TASK_CONFIGS=(
-  "ChemBench|ChemBench|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --num_workers $NUM_WORKERS"
-  "gaokao|gaokao|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 5 --num_workers $NUM_WORKERS"
-  "GPQA_EvalScope|GPQA_EvalScope|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 8 --num_workers $NUM_WORKERS"
-  "GPQA|GPQA|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 1.0 --timeout 3600 --n 8 --num_workers $NUM_WORKERS"
-  "LAB-Bench|LAB-Bench|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 7200 --n 1 --num_workers $NUM_WORKERS"
-  "LLM-MSE|LLM-MSE|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 8 --judge_api_url https://s1-wjy-resource.openai.azure.com/openai/v1/ --judge_model gpt-4o --judge_api_key F6GuYA0c2MSCn1Fi8CSFa1fzIRrZl79etoUDNrXexpXxdNDg4T1zJQQJ99BFACHYHv6XJ3w3AAAAACOGkoWg --num_workers $NUM_WORKERS"
-  "MaScQA|MaScQA|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 1 --judge_api_url https://s1-wjy-resource.openai.azure.com/openai/v1/ --judge_model gpt-4o --judge_api_key F6GuYA0c2MSCn1Fi8CSFa1fzIRrZl79etoUDNrXexpXxdNDg4T1zJQQJ99BFACHYHv6XJ3w3AAAAACOGkoWg --num_workers $NUM_WORKERS"
-  "MSQA_Long|MSQA_Long|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 1 --judge_api_url https://s1-wjy-resource.openai.azure.com/openai/v1/ --judge_model gpt-4o --judge_api_key F6GuYA0c2MSCn1Fi8CSFa1fzIRrZl79etoUDNrXexpXxdNDg4T1zJQQJ99BFACHYHv6XJ3w3AAAAACOGkoWg --num_workers $NUM_WORKERS"
-  "MSQA_Short|MSQA_Short|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "Physics|Physics|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 1.0 --timeout 3600 --n 1 --judge_api_url https://ark.cn-beijing.volces.com/api/v3/ --judge_api_key 30a70266-37d5-4210-b8a2-34d5fb629230 --judge_model ep-20251110162353-6zqst --num_workers $NUM_WORKERS"
-  "Qiskit_HumanEval|Qiskit_HumanEval|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 1.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "ProteinLMbench|ProteinLMBench|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "SciBench|SciBench|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "SciEval|SciEval|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 1.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "TOMG-Bench|TOMG-Bench|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 1.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "UGPhysics|UGPhysics|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 1.0 --timeout 3600 --n 1 --judge_api_url https://ark.cn-beijing.volces.com/api/v3/ --judge_api_key 30a70266-37d5-4210-b8a2-34d5fb629230 --judge_model ep-20251110162353-6zqst --num_workers $NUM_WORKERS"
-  "IFEval|IFEval|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 3600 --n 1 --num_workers $NUM_WORKERS"
-  "InternalLongtext|InternalLongtext|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 10800 --n 1 --num_workers $NUM_WORKERS"
-  "AIME25|MATH|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 18000 --n 16 --task aime25 --num_workers $NUM_WORKERS"
-  "AIME24|MATH|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 18000 --n 16 --task aime24 --num_workers $NUM_WORKERS"
-  "AMC23|MATH|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 18000 --n 4 --task amc23 --num_workers $NUM_WORKERS"
-  "LIVE_MATH_BENCH|MATH|--api_url $API_URL --api_key $API_KEY --temperature 0.6 --top_p 0.95 --presence_penalty 0.0 --timeout 18000 --n 4 --task live_math_bench --num_workers $NUM_WORKERS"
+  "ChemBench|ChemBench|"
+  "GPQA|GPQA|"
+  "LAB-Bench|LAB-Bench|"
+  "MaScQA|MaScQA|"
+  "MSQA_Long|MSQA_Long|"
+  "MSQA_Short|MSQA_Short|"
+  "Physics|Physics|"
+  "Qiskit_HumanEval|Qiskit_HumanEval|"
+  "ProteinLMbench|ProteinLMBench|"
+  "SciBench|SciBench|"
+  "TOMG-Bench|TOMG-Bench|"
+  "AIME25|MATH|--task aime25"
+  "AIME24|MATH|--task aime24"
+  "AMC23|MATH|--task amc23"
+  "LIVE_MATH_BENCH|MATH|--task live_math_bench"
 )
 
 show_help() {
-  echo "Usage: $0 [task_number ...]"
-  echo "Run benchmark tasks sequentially. If no task number is given, run all tasks."
+  echo "Usage:"
+  echo "  $0 --model <model_name> --api_url <api_url> [options] [task_number ...]"
+  echo
+  echo "Run benchmark tasks sequentially (by task number)."
+  echo "If no task number is given, run all tasks."
+  echo
+  echo "Required options:"
+  echo "  --model            Model name (required flag; value may be empty string \"\")"
+  echo "  --api_url          API base url (required flag; value may be empty string \"\")"
+  echo
+  echo "Optional options (only included if provided):"
+  echo "  --api_key"
+  echo "  --temperature"
+  echo "  --top_p"
+  echo "  --presence_penalty"
+  echo "  --max_tokens"
+  echo "  --timeout"
+  echo "  --num_workers"
+  echo "  --n"
+  echo "  --judge_api_url"
+  echo "  --judge_model"
+  echo "  --judge_api_key"
+  echo "  --roll_labeled TRUE|FALSE"
+  echo "  --use_vl_mode TRUE|FALSE"
+  echo "  -h, --help"
   echo
   echo "Examples:"
-  echo "  Run all tasks:     $0"
-  echo "  Run task 1 and 3:  $0 1 3"
-  echo "  Show help:         $0 -h | $0 --help"
+  echo "  Run all:   $0 --model \"my_model\" --api_url \"http://127.0.0.1:8000/v1\" --api_key \"...\""
+  echo "  Run 1&3:   $0 --model \"my_model\" --api_url \"http://127.0.0.1:8000/v1\" 1 3"
+  echo "  With roll: $0 --model \"my_model\" --api_url \"...\" --roll_labeled TRUE 6"
   echo
   echo "Available tasks:"
   for i in "${!TASK_NAMES[@]}"; do
@@ -72,22 +93,101 @@ show_help() {
   done
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  show_help
-  exit 0
-fi
+_upper_bool() {
+  local v="${1:-}"
+  v="${v^^}"
+  if [[ "$v" != "TRUE" && "$v" != "FALSE" ]]; then
+    echo "Error: boolean must be TRUE or FALSE - $1" >&2
+    exit 1
+  fi
+  echo "$v"
+}
+
+_mask() {
+  local s="$1"
+  [[ -z "$s" ]] && { echo ""; return; }
+  local n=${#s}
+  ((n<=6)) && { echo "***"; return; }
+  echo "${s:0:4}***${s: -2}"
+}
+
+parse_args() {
+  local model_provided=0
+  local api_url_provided=0
+  TASK_NUMS=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        show_help
+        exit 0
+        ;;
+      --model)
+        MODEL_NAME="${2-}"
+        model_provided=1
+        shift 2
+        ;;
+      --api_url)
+        API_URL="${2-}"
+        api_url_provided=1
+        shift 2
+        ;;
+      --api_key) API_KEY="${2-}"; shift 2 ;;
+      --temperature) TEMPERATURE="${2-}"; shift 2 ;;
+      --top_p) TOP_P="${2-}"; shift 2 ;;
+      --presence_penalty) PRESENCE_PENALTY="${2-}"; shift 2 ;;
+      --max_tokens) MAX_TOKENS="${2-}"; shift 2 ;;
+      --timeout) TIMEOUT="${2-}"; shift 2 ;;
+      --num_workers) NUM_WORKERS="${2-}"; shift 2 ;;
+      --n) N="${2-}"; shift 2 ;;
+      --judge_api_url) JUDGE_API_URL="${2-}"; shift 2 ;;
+      --judge_model) JUDGE_MODEL="${2-}"; shift 2 ;;
+      --judge_api_key) JUDGE_API_KEY="${2-}"; shift 2 ;;
+      --roll_labeled) ROLL_LABELED="$(_upper_bool "${2-}")"; shift 2 ;;
+      --use_vl_mode) USE_VL_MODE="$(_upper_bool "${2-}")"; shift 2 ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        # Task numbers are positional (e.g. "1 3 5").
+        if [[ "$1" =~ ^[0-9]+$ ]]; then
+          TASK_NUMS+=("$1")
+          shift
+        else
+          echo "Error: unknown option/argument: $1" >&2
+          show_help
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  # Remaining args after '--' are also task numbers.
+  for x in "$@"; do
+    if ! [[ "$x" =~ ^[0-9]+$ ]]; then
+      echo "Error: task number must be numeric - $x" >&2
+      exit 1
+    fi
+    TASK_NUMS+=("$x")
+  done
+
+  if [[ $model_provided -eq 0 || $api_url_provided -eq 0 ]]; then
+    echo "Error: --model and --api_url are required flags (value may be empty string)" >&2
+    show_help
+    exit 1
+  fi
+}
+
+parse_args "$@"
 
 SELECTED_TASK_ORIGINAL_INDEXES=()
-if [[ $# -eq 0 ]]; then
+if [[ ${#TASK_NUMS[@]} -eq 0 ]]; then
   for i in "${!TASK_NAMES[@]}"; do
     SELECTED_TASK_ORIGINAL_INDEXES+=("$i")
   done
 else
-  for task_num in "$@"; do
-    if ! [[ "$task_num" =~ ^[0-9]+$ ]]; then
-      echo "Error: task number must be numeric - $task_num" >&2
-      exit 1
-    fi
+  for task_num in "${TASK_NUMS[@]}"; do
     original_index=$((task_num - 1))
     if (( original_index < 0 || original_index >= ${#TASK_NAMES[@]} )); then
       echo "Error: invalid task number - $task_num (valid range: 1..${#TASK_NAMES[@]})" >&2
@@ -125,6 +225,8 @@ echo "Model: $MODEL_NAME"
 echo "Timestamp: $TIMESTAMP"
 echo "ROLL_LABELED: $ROLL_LABELED"
 echo "USE_VL_MODE: $USE_VL_MODE"
+echo "API_URL: $API_URL"
+echo "API_KEY: $([[ -n "$API_KEY" ]] && echo "$(_mask "$API_KEY")" || echo "(not set)")"
 echo
 echo "Tasks to run:"
 for original_index in "${SELECTED_TASK_ORIGINAL_INDEXES[@]}"; do
@@ -134,6 +236,24 @@ for original_index in "${SELECTED_TASK_ORIGINAL_INDEXES[@]}"; do
 done
 echo "----------------------------------------"
 
+build_common_args() {
+  COMMON_ARGS=()
+  [[ -n "$API_KEY" ]] && COMMON_ARGS+=(--api_key "$API_KEY")
+  [[ -n "$TEMPERATURE" ]] && COMMON_ARGS+=(--temperature "$TEMPERATURE")
+  [[ -n "$TOP_P" ]] && COMMON_ARGS+=(--top_p "$TOP_P")
+  [[ -n "$PRESENCE_PENALTY" ]] && COMMON_ARGS+=(--presence_penalty "$PRESENCE_PENALTY")
+  [[ -n "$MAX_TOKENS" ]] && COMMON_ARGS+=(--max_tokens "$MAX_TOKENS")
+  [[ -n "$TIMEOUT" ]] && COMMON_ARGS+=(--timeout "$TIMEOUT")
+  [[ -n "$NUM_WORKERS" ]] && COMMON_ARGS+=(--num_workers "$NUM_WORKERS")
+  [[ -n "$N" ]] && COMMON_ARGS+=(--n "$N")
+
+  [[ -n "$JUDGE_API_URL" ]] && COMMON_ARGS+=(--judge_api_url "$JUDGE_API_URL")
+  [[ -n "$JUDGE_MODEL" ]] && COMMON_ARGS+=(--judge_model "$JUDGE_MODEL")
+  [[ -n "$JUDGE_API_KEY" ]] && COMMON_ARGS+=(--judge_api_key "$JUDGE_API_KEY")
+}
+
+build_common_args
+
 run_task() {
   local task_index="$1"
   local original_index="$2"
@@ -141,24 +261,11 @@ run_task() {
   local config="${TASK_CONFIGS[task_index]}"
 
   # Parse config
-  local name rel_dir params
-  IFS='|' read -r name rel_dir params <<< "$config"
+  local name rel_dir fixed_args
+  IFS='|' read -r name rel_dir fixed_args <<< "$config"
 
   local start_time
   start_time="$(date +"%Y-%m-%d %H:%M:%S")"
-
-  # Model-specific tweaks
-  if [[ "$MODEL_NAME" == "gpt-4" ]]; then
-    echo "Warning: GPT-4 may not support multi-turn, appending --single_turn"
-    params="${params} --single_turn"
-  fi
-
-  if [[ "$ROLL_LABELED" == "TRUE" ]]; then
-    params="${params} --pass_data_path '/data02/home/zdhs0075/benchmark_suite/Rolldata1015/test_outputs_good/${rel_dir}.json'"
-  fi
-  if [[ "$USE_VL_MODE" == "TRUE" ]]; then
-    params="${params} --use_vl_mode"
-  fi
 
   local task_dir="${BASE_DIR}/${rel_dir}"
   local model_name_no_spaces="${MODEL_NAME// /}"
@@ -187,11 +294,39 @@ run_task() {
   }
 
   local log_path="${LOG_DIR_NAME}/${log_file_name}"
-  local cmd="python -u run.py --model $MODEL_NAME $params > $log_path 2>&1"
-  echo "Command: $cmd"
+  local cmd=()
+  cmd+=(python -u run.py)
+  cmd+=(--model "$MODEL_NAME")
+  cmd+=(--api_url "$API_URL")
+  cmd+=("${COMMON_ARGS[@]}")
+
+  # Model-specific tweaks
+  if [[ "$MODEL_NAME" == "gpt-4" ]]; then
+    cmd+=(--single_turn)
+  fi
+
+  if [[ "$ROLL_LABELED" == "TRUE" ]]; then
+    cmd+=(--pass_data_path "/data02/home/zdhs0075/benchmark_suite/Rolldata1015/test_outputs_good/${rel_dir}.json")
+  fi
+  if [[ "$USE_VL_MODE" == "TRUE" ]]; then
+    cmd+=(--use_vl_mode)
+  fi
+
+  if [[ -n "$fixed_args" ]]; then
+    local fixed_arr=()
+    # fixed_args is a simple space-separated string, e.g. "--task aime24"
+    read -r -a fixed_arr <<< "$fixed_args"
+    cmd+=("${fixed_arr[@]}")
+  fi
+
+  # Print command with masked secrets
+  local cmd_print="${cmd[*]}"
+  [[ -n "$API_KEY" ]] && cmd_print="${cmd_print//--api_key $API_KEY/--api_key ***}"
+  [[ -n "$JUDGE_API_KEY" ]] && cmd_print="${cmd_print//--judge_api_key $JUDGE_API_KEY/--judge_api_key ***}"
+  echo "Command: ${cmd_print}"
   echo "Log: $log_path"
 
-  eval "$cmd"
+  "${cmd[@]}" > "$log_path" 2>&1
   local exit_code=$?
 
   local end_time
